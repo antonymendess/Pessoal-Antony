@@ -1,118 +1,112 @@
-const STORAGE_KEY = "cadastro-usuario";
+const API_URL = 'https://crudcrud.com/api/6db2abcd422543ceb45f085f76924b80/clientes';
 
-const form = document.getElementById("form-cadastro");
-const campos = form.querySelectorAll("input");
-const cepInput = document.getElementById("cep");
-const cepStatus = document.getElementById("cep-status");
-const mensagem = document.getElementById("mensagem");
-const btnLimpar = document.getElementById("btn-limpar");
+const form = document.getElementById('clienteForm');
+const nomeInput = document.getElementById('nome');
+const emailInput = document.getElementById('email');
+const listaClientes = document.getElementById('listaClientes');
+const mensagemDiv = document.getElementById('mensagem');
 
-const enderecoInputs = {
-  logradouro: document.getElementById("logradouro"),
-  bairro: document.getElementById("bairro"),
-  cidade: document.getElementById("cidade"),
-  estado: document.getElementById("estado"),
-};
-
-function salvarNoStorage() {
-  const dados = {};
-  campos.forEach((campo) => {
-    dados[campo.name] = campo.value;
-  });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(dados));
+function mostrarMensagem(texto, tipo) {
+  mensagemDiv.textContent = texto;
+  mensagemDiv.className = `mensagem ${tipo}`;
+  setTimeout(() => {
+    mensagemDiv.textContent = '';
+    mensagemDiv.className = 'mensagem';
+  }, 3000);
 }
 
-function restaurarDoStorage() {
-  const dadosSalvos = localStorage.getItem(STORAGE_KEY);
-  if (!dadosSalvos) return;
-
-  const dados = JSON.parse(dadosSalvos);
-  campos.forEach((campo) => {
-    if (dados[campo.name] !== undefined) {
-      campo.value = dados[campo.name];
+async function listarClientes() {
+  try {
+    const resposta = await fetch(API_URL);
+    if (!resposta.ok) {
+      throw new Error(`Erro ao buscar clientes: ${resposta.status}`);
     }
-  });
-}
-
-function formatarCep(valor) {
-  const numeros = valor.replace(/\D/g, "").slice(0, 8);
-  if (numeros.length > 5) {
-    return `${numeros.slice(0, 5)}-${numeros.slice(5)}`;
+    const clientes = await resposta.json();
+    renderizarClientes(clientes);
+  } catch (erro) {
+    console.error(erro);
+    mostrarMensagem('Erro ao carregar clientes.', 'erro');
   }
-  return numeros;
 }
 
-function definirStatus(texto, tipo) {
-  cepStatus.textContent = texto;
-  cepStatus.className = `status ${tipo || ""}`.trim();
-}
+function renderizarClientes(clientes) {
+  listaClientes.innerHTML = '';
 
-async function buscarEnderecoPorCep(cep) {
-  const cepLimpo = cep.replace(/\D/g, "");
-
-  if (cepLimpo.length !== 8) {
-    definirStatus("", "");
+  if (clientes.length === 0) {
+    listaClientes.innerHTML = '<li>Nenhum cliente cadastrado.</li>';
     return;
   }
 
-  definirStatus("Buscando endereço...", "loading");
+  clientes.forEach((cliente) => {
+    const li = document.createElement('li');
 
+    const info = document.createElement('div');
+    info.className = 'cliente-info';
+    info.innerHTML = `<strong>${cliente.nome}</strong><span>${cliente.email}</span>`;
+
+    const botaoExcluir = document.createElement('button');
+    botaoExcluir.textContent = 'Excluir';
+    botaoExcluir.className = 'btn-excluir';
+    botaoExcluir.addEventListener('click', () => excluirCliente(cliente._id));
+
+    li.appendChild(info);
+    li.appendChild(botaoExcluir);
+    listaClientes.appendChild(li);
+  });
+}
+
+async function cadastrarCliente(nome, email) {
   try {
-    const resposta = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+    const resposta = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, email }),
+    });
 
     if (!resposta.ok) {
-      throw new Error("Falha na requisição");
+      throw new Error(`Erro ao cadastrar cliente: ${resposta.status}`);
     }
 
-    const dados = await resposta.json();
-
-    if (dados.erro) {
-      definirStatus("CEP não encontrado.", "error");
-      return;
-    }
-
-    enderecoInputs.logradouro.value = dados.logradouro || "";
-    enderecoInputs.bairro.value = dados.bairro || "";
-    enderecoInputs.cidade.value = dados.localidade || "";
-    enderecoInputs.estado.value = dados.uf || "";
-
-    definirStatus("Endereço encontrado!", "success");
-    salvarNoStorage();
-    document.getElementById("numero").focus();
+    mostrarMensagem('Cliente cadastrado com sucesso!', 'sucesso');
+    await listarClientes();
   } catch (erro) {
-    definirStatus("Erro ao buscar o CEP. Tente novamente.", "error");
+    console.error(erro);
+    mostrarMensagem('Erro ao cadastrar cliente.', 'erro');
   }
 }
 
-cepInput.addEventListener("input", (evento) => {
-  evento.target.value = formatarCep(evento.target.value);
-});
+async function excluirCliente(id) {
+  try {
+    const resposta = await fetch(`${API_URL}/${id}`, {
+      method: 'DELETE',
+    });
 
-cepInput.addEventListener("blur", (evento) => {
-  buscarEnderecoPorCep(evento.target.value);
-});
+    if (!resposta.ok) {
+      throw new Error(`Erro ao excluir cliente: ${resposta.status}`);
+    }
 
-campos.forEach((campo) => {
-  campo.addEventListener("input", salvarNoStorage);
-});
+    mostrarMensagem('Cliente excluído com sucesso!', 'sucesso');
+    await listarClientes();
+  } catch (erro) {
+    console.error(erro);
+    mostrarMensagem('Erro ao excluir cliente.', 'erro');
+  }
+}
 
-form.addEventListener("submit", (evento) => {
+form.addEventListener('submit', (evento) => {
   evento.preventDefault();
-  salvarNoStorage();
-  mensagem.textContent = "Cadastro salvo com sucesso!";
-  setTimeout(() => {
-    mensagem.textContent = "";
-  }, 3000);
-});
 
-btnLimpar.addEventListener("click", () => {
+  const nome = nomeInput.value.trim();
+  const email = emailInput.value.trim();
+
+  if (!nome || !email) {
+    mostrarMensagem('Preencha nome e e-mail.', 'erro');
+    return;
+  }
+
+  cadastrarCliente(nome, email);
   form.reset();
-  localStorage.removeItem(STORAGE_KEY);
-  definirStatus("", "");
-  mensagem.textContent = "Dados limpos.";
-  setTimeout(() => {
-    mensagem.textContent = "";
-  }, 3000);
+  nomeInput.focus();
 });
 
-document.addEventListener("DOMContentLoaded", restaurarDoStorage);
+listarClientes();
